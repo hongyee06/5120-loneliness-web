@@ -29,6 +29,10 @@ let map
 let geocoder
 let directionsService
 let directionsRenderer
+let placesService
+let infoWindow
+/** @type {google.maps.Marker[]} */
+let toiletMarkers = []
 /** @type {google.maps.Marker | null} */
 let userMarker
 /** @type {google.maps.Marker | null} */
@@ -297,6 +301,107 @@ function initMap() {
       strokeWeight: 5,
     },
   })
+  placesService = new window.google.maps.places.PlacesService(map)
+  infoWindow = new window.google.maps.InfoWindow()
+}
+
+function clearToiletMarkers() {
+  for (const marker of toiletMarkers) {
+    if (marker) marker.setMap(null)
+  }
+  toiletMarkers = []
+}
+
+function createToiletMarker(place) {
+  if (!place.geometry || !place.geometry.location) return
+
+  const marker = new window.google.maps.Marker({
+    map,
+    position: place.geometry.location,
+    title: place.name,
+    zIndex: 800,
+    icon: {
+      path: 'M -1.5,-1.5 L 1.5,-1.5 L 1.5,1.5 L -1.5,1.5 z',
+      scale: 10,
+      fillColor: '#3b82f6',
+      fillOpacity: 1,
+      strokeColor: '#ffffff',
+      strokeWeight: 2,
+    },
+    label: {
+      text: 'WC',
+      color: '#ffffff',
+      fontSize: '11px',
+      fontWeight: '800',
+    },
+  })
+
+  marker.addListener('click', () => {
+    infoWindow.setContent(`
+      <div style="font-family: inherit; color: #1e293b; padding: 4px;">
+        <strong style="display: block; margin-bottom: 4px; font-size: 14px;">${place.name || 'Public Toilet'}</strong>
+        <span style="font-size: 13px;">Loading details...</span>
+      </div>
+    `)
+    infoWindow.open(map, marker)
+
+    placesService.getDetails(
+      { placeId: place.place_id, fields: ['name', 'opening_hours', 'formatted_address'] },
+      (details, status) => {
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && details) {
+          let hoursHtml = '<div style="font-size: 13px; margin-top: 8px;">No opening hours available.</div>'
+          if (details.opening_hours?.weekday_text) {
+            hoursHtml = '<div style="font-size: 13px; margin-top: 8px;"><strong>Opening Hours:</strong><ul style="padding-left: 16px; margin: 4px 0 0 0;">'
+            details.opening_hours.weekday_text.forEach(day => {
+              hoursHtml += `<li>${day}</li>`
+            })
+            hoursHtml += '</ul></div>'
+          } else if (details.opening_hours) {
+            const isOpen = details.opening_hours.isOpen() ? '<span style="color:#16a34a; font-weight:700;">Open Now</span>' : '<span style="color:#dc2626; font-weight:700;">Closed</span>'
+            hoursHtml = `<div style="font-size: 13px; margin-top: 8px;">${isOpen}</div>`
+          }
+
+          infoWindow.setContent(`
+            <div style="font-family: inherit; color: #1e293b; padding: 4px; max-width: 250px;">
+              <strong style="display: block; margin-bottom: 4px; font-size: 15px;">${details.name || 'Public Toilet'}</strong>
+              <div style="font-size: 12px; color: #64748b;">${details.formatted_address || ''}</div>
+              ${hoursHtml}
+            </div>
+          `)
+        } else {
+          infoWindow.setContent(`
+            <div style="font-family: inherit; color: #1e293b; padding: 4px;">
+              <strong style="display: block; margin-bottom: 4px; font-size: 14px;">${place.name || 'Public Toilet'}</strong>
+              <span style="font-size: 13px; color: #dc2626;">Failed to load opening hours.</span>
+            </div>
+          `)
+        }
+      }
+    )
+  })
+
+  toiletMarkers.push(marker)
+}
+
+function searchToiletsForRoute(result) {
+  clearToiletMarkers()
+  if (!placesService || !result.routes || result.routes.length === 0) return
+
+  const bounds = result.routes[0].bounds
+  if (!bounds) return
+
+  const request = {
+    bounds,
+    query: 'public toilet',
+  }
+
+  placesService.textSearch(request, (results, status) => {
+    if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+      for (const place of results) {
+        createToiletMarker(place)
+      }
+    }
+  })
 }
 
 function onStartInput() {
@@ -407,10 +512,14 @@ async function generateRoute() {
       setEndpointMarker('start', routeLeg.start_location)
       setEndpointMarker('dest', routeLeg.end_location)
     }
+    
+    searchToiletsForRoute(result)
+
     preferencesDirty.value = false
   } catch (e) {
     routeError.value = e?.message || 'Failed to generate route'
     directionsRenderer.setDirections(null)
+    clearToiletMarkers()
     if (startMarker) startMarker.setMap(null)
     if (destMarker) destMarker.setMap(null)
   } finally {
@@ -436,6 +545,7 @@ onUnmounted(() => {
     navigator.geolocation.clearWatch(geoWatchId)
     geoWatchId = null
   }
+  clearToiletMarkers()
   if (userMarker) userMarker.setMap(null)
   userMarker = null
   if (startMarker) startMarker.setMap(null)
