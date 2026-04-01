@@ -164,14 +164,15 @@ function requestCurrentPosition() {
         ensureUserMarker(pos)
         resolve(pos)
       },
-      () => {
+      (err) => {
+        console.warn('Geolocation error:', err)
         reject(
           new Error(
             'Unable to get your location. Please allow location access in the browser or enter the start manually.',
           ),
         )
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
     )
   })
 }
@@ -329,11 +330,26 @@ function useMyLocation() {
   startPlace = null
   startLocation.value = 'Current location'
 
+  const continueRouting = async () => {
+    if (travelMode.value && (destination.value.trim() || endPlace)) {
+      await generateRoute()
+    }
+  }
+
+  if (userLatLng.value) {
+    map.panTo(userLatLng.value)
+    map.setZoom(16)
+    watchPositionIfSupported()
+    continueRouting()
+    return
+  }
+
   requestCurrentPosition()
     .then(async (pos) => {
       map.panTo(pos)
       map.setZoom(16)
       watchPositionIfSupported()
+      continueRouting()
     })
     .catch((e) => {
       originMode.value = 'manual'
