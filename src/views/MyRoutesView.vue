@@ -18,6 +18,8 @@ const preferencesDirty = ref(false)
 
 const socialDensity = ref('normal') // 'busy' | 'normal' | 'quiet' (UI only)
 const shadeLevel = ref('normal') // 'more' | 'normal' | 'less' (UI only)
+const noToiletsFound = ref(false)
+const noBenchesFound = ref(false)
 
 /** @type {{ lat: number, lng: number } | null} */
 const userLatLng = ref(null)
@@ -392,12 +394,47 @@ function createToiletMarker(place) {
   toiletMarkers.push(marker)
 }
 
-function searchToiletsForRoute(result) {
-  clearToiletMarkers()
-  if (!placesService || !result.routes || result.routes.length === 0) return
+function getRoutePath(route) {
+  if (!route) return []
 
-  const bounds = result.routes[0].bounds
-  if (!bounds) return
+  const points = []
+  if (route.legs?.length) {
+    for (const leg of route.legs) {
+      if (!leg.steps?.length) continue
+      for (const step of leg.steps) {
+        if (step.path?.length) points.push(...step.path)
+      }
+    }
+  }
+
+  // Use detailed step paths first; fallback to overview path when needed.
+  return points.length > 0 ? points : route.overview_path || []
+}
+
+function isNearRoutePath(location, routePath, maxDistanceMeters = 120) {
+  if (!window.google?.maps?.geometry?.spherical || !location || routePath.length === 0) return false
+
+  for (const point of routePath) {
+    const distance = window.google.maps.geometry.spherical.computeDistanceBetween(location, point)
+    if (distance <= maxDistanceMeters) return true
+  }
+  return false
+}
+
+function searchToiletsForRoute(route) {
+  clearToiletMarkers()
+  if (!placesService || !route) {
+    noToiletsFound.value = true
+    return
+  }
+
+  const bounds = route.bounds
+  if (!bounds) {
+    noToiletsFound.value = true
+    return
+  }
+
+  const routePath = getRoutePath(route)
 
   const request = {
     bounds,
@@ -405,10 +442,29 @@ function searchToiletsForRoute(result) {
   }
 
   placesService.textSearch(request, (results, status) => {
-    if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
-      for (const place of results) {
-        createToiletMarker(place)
-      }
+    const hasResults = Boolean(
+      status === window.google.maps.places.PlacesServiceStatus.OK && results && results.length > 0,
+    )
+
+    if (!hasResults) {
+      noToiletsFound.value = true
+      return
+    }
+
+    const toiletsWithinDisplayRange = results.filter((place) => {
+      const loc = place.geometry?.location
+      return loc && isNearRoutePath(loc, routePath, 800)
+    })
+
+    // Alert logic: "along-route toilet" uses a tighter threshold than display range.
+    const toiletsAlongRoute = toiletsWithinDisplayRange.filter((place) => {
+      const loc = place.geometry?.location
+      return loc && isNearRoutePath(loc, routePath, 120)
+    })
+
+    noToiletsFound.value = toiletsAlongRoute.length === 0
+    for (const place of toiletsWithinDisplayRange) {
+      createToiletMarker(place)
     }
   })
 }
@@ -460,15 +516,22 @@ function createBenchMarker(bench) {
 /**
  * Fetches bench data from the backend based on route bounds
  */
-async function fetchBenchesForRoute(result) {
+async function fetchBenchesForRoute(route) {
   clearBenchMarkers()
-  if (!result.routes || result.routes.length === 0) return
+  if (!route) {
+    noBenchesFound.value = true
+    return
+  }
 
-  const bounds = result.routes[0].bounds
-  if (!bounds) return
+  const bounds = route.bounds
+  if (!bounds) {
+    noBenchesFound.value = true
+    return
+  }
 
   const ne = bounds.getNorthEast()
   const sw = bounds.getSouthWest()
+  const routePath = getRoutePath(route)
 
   try {
     // Construct search params based on bounding box
@@ -498,17 +561,30 @@ async function fetchBenchesForRoute(result) {
     }
 
     // In a real scenario, use actual fetch:
+    let benchData = []
     if (BENCH_API_URL !== 'YOUR_LAMBDA_API_ENDPOINT/benches') {
       const response = await fetch(`${BENCH_API_URL}?${params}`)
       if (!response.ok) throw new Error('Failed to fetch benches')
-      const data = await response.json()
-      data.forEach((bench) => createBenchMarker(bench))
+      benchData = await response.json()
     } else {
       // Use mock data for demo
-      mockBenches.forEach((bench) => createBenchMarker(bench))
+      benchData = mockBenches
     }
+
+    const nearbyBenches = benchData.filter((bench) => {
+      if (bench.lat === undefined || bench.lng === undefined) return false
+      const lat = Number(bench.lat)
+      const lng = Number(bench.lng)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+      const position = new window.google.maps.LatLng(lat, lng)
+      return isNearRoutePath(position, routePath)
+    })
+
+    noBenchesFound.value = nearbyBenches.length === 0
+    nearbyBenches.forEach((bench) => createBenchMarker(bench))
   } catch (error) {
     console.error('[Benches] Error fetching bench data:', error)
+    noBenchesFound.value = true
   }
 }
 
@@ -575,6 +651,8 @@ function useMyLocation() {
 async function generateRoute() {
   routeError.value = ''
   routeSummary.value = ''
+  noToiletsFound.value = false
+  noBenchesFound.value = false
 
   if (!directionsService || !directionsRenderer) return
 
@@ -667,8 +745,8 @@ async function generateRoute() {
       setEndpointMarker('dest', leg.end_location)
     }
 
-    searchToiletsForRoute(result)
-    fetchBenchesForRoute(result)
+    searchToiletsForRoute(route)
+    fetchBenchesForRoute(route)
 
     preferencesDirty.value = false
   } catch (e) {
@@ -776,6 +854,25 @@ onUnmounted(() => {
       <p v-if="routeSummary" class="route-summary">Estimate: {{ routeSummary }}</p>
       <p v-if="routeError" class="route-error">{{ routeError }}</p>
 
+      <div v-if="noToiletsFound || noBenchesFound" class="route-alerts">
+        <div v-if="noToiletsFound" class="alert-card warning">
+          <span class="alert-icon" aria-hidden="true">⚠️</span>
+          <div class="alert-content">
+            <strong class="alert-title">Route notice: no public toilets</strong>
+            <p class="alert-desc">
+              No public toilets were found along this route. Please plan ahead.
+            </p>
+          </div>
+        </div>
+        <div v-if="noBenchesFound" class="alert-card warning">
+          <span class="alert-icon" aria-hidden="true">⚠️</span>
+          <div class="alert-content">
+            <strong class="alert-title">Route notice: no rest benches</strong>
+            <p class="alert-desc">No rest benches were found along this route.</p>
+          </div>
+        </div>
+      </div>
+
       <section class="prefs">
         <h2 class="prefs-title">Route Preferences</h2>
 
@@ -792,7 +889,7 @@ onUnmounted(() => {
               title="Busy"
               @click="setSocialDensity('busy')"
             >
-              1
+              busy
             </button>
             <button
               type="button"
@@ -801,7 +898,7 @@ onUnmounted(() => {
               title="Normal"
               @click="setSocialDensity('normal')"
             >
-              2
+              medium
             </button>
             <button
               type="button"
@@ -810,7 +907,7 @@ onUnmounted(() => {
               title="Quiet"
               @click="setSocialDensity('quiet')"
             >
-              3
+              quiet
             </button>
           </div>
         </div>
@@ -828,7 +925,7 @@ onUnmounted(() => {
               title="More shade"
               @click="setShadeLevel('more')"
             >
-              1
+              high
             </button>
             <button
               type="button"
@@ -837,7 +934,7 @@ onUnmounted(() => {
               title="Normal"
               @click="setShadeLevel('normal')"
             >
-              2
+              medium
             </button>
             <button
               type="button"
@@ -846,7 +943,7 @@ onUnmounted(() => {
               title="Less shade"
               @click="setShadeLevel('less')"
             >
-              3
+              low
             </button>
           </div>
         </div>
@@ -1138,6 +1235,8 @@ onUnmounted(() => {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .pref-icon,
@@ -1147,24 +1246,23 @@ onUnmounted(() => {
   color: #ffffff;
   border-radius: 10px;
   cursor: pointer;
+  min-width: 56px;
+  height: 38px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  text-transform: lowercase;
 }
 
 .pref-icon {
-  width: 38px;
-  height: 38px;
-  font-size: 18px;
-  font-weight: 900;
-  display: grid;
-  place-items: center;
+  min-width: 56px;
 }
 
 .pref-mid {
-  width: 38px;
-  height: 38px;
-  font-size: 13px;
-  font-weight: 800;
-  display: grid;
-  place-items: center;
+  min-width: 66px;
 }
 
 .pref-icon.active,
@@ -1312,6 +1410,50 @@ onUnmounted(() => {
 .bench-icon {
   background: #d99a2b;
   border-radius: 50%;
+}
+
+.route-alerts {
+  margin-top: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-card.warning {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.alert-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.alert-content {
+  flex: 1;
+}
+
+.alert-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.alert-desc {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b45309;
+  line-height: 1.4;
 }
 
 @media (max-width: 1024px) {
