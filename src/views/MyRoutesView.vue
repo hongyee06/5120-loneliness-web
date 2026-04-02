@@ -49,6 +49,8 @@ let endAutocomplete
 let geoWatchId = null
 
 const BENCH_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/benches' // TODO: Replace with actual backend URL
+const SHADE_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/analyze-shade' // TODO: Replace with actual backend URL
+const CROWD_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/analyze-crowds' // TODO: Replace with actual backend URL
 
 const TRAVEL_MODES = [
   { id: 'WALKING', label: 'Walking 🚶' },
@@ -648,6 +650,88 @@ function useMyLocation() {
     })
 }
 
+/**
+ * Fetches tree shade scores from the backend for multiple route alternatives.
+ * @param {google.maps.DirectionsRoute[]} routes
+ */
+async function fetchShadeAnalysis(routes) {
+  if (!routes || routes.length === 0) return []
+
+  // Ensure actual endpoint is set
+  if (SHADE_API_URL === 'YOUR_LAMBDA_API_ENDPOINT/analyze-shade') {
+    console.warn('[Shade Analysis] No real API endpoint provided. Using fallback mocks.')
+    return routes.map((_, i) => ({ id: i, shadeScore: Math.floor(Math.random() * 100) }))
+  }
+
+  try {
+    // Simplify route paths for transmission (sample every 10 points)
+    const pathsToAnalyze = routes.map((route, i) => {
+      const allPoints = route.overview_path || []
+      const sampledPoints = allPoints
+        .filter((_, idx) => idx % 10 === 0)
+        .map((p) => ({
+          lat: p.lat(),
+          lng: p.lng(),
+        }))
+      return { id: i, path: sampledPoints }
+    })
+
+    const response = await fetch(SHADE_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ routes: pathsToAnalyze }),
+    })
+
+    if (!response.ok) throw new Error('Shade analysis API failed')
+    const data = await response.json()
+    return data.results || []
+  } catch (error) {
+    console.error('[Shade Analysis] Error calling backend:', error)
+    // Fallback to random scores so the app doesn't break
+    return routes.map((_, i) => ({ id: i, shadeScore: Math.floor(Math.random() * 100) }))
+  }
+}
+
+/**
+ * Fetches crowd density scores from the backend for multiple route alternatives.
+ * @param {google.maps.DirectionsRoute[]} routes
+ */
+async function fetchCrowdAnalysis(routes) {
+  if (!routes || routes.length === 0) return []
+
+  // Ensure actual endpoint is set
+  if (CROWD_API_URL === 'YOUR_LAMBDA_API_ENDPOINT/analyze-crowds') {
+    console.warn('[Crowd Analysis] No real API endpoint provided. Using fallback mocks.')
+    return routes.map((_, i) => ({ id: i, socialScore: Math.floor(Math.random() * 100) }))
+  }
+
+  try {
+    const pathsToAnalyze = routes.map((route, i) => {
+      const allPoints = route.overview_path || []
+      const sampledPoints = allPoints
+        .filter((_, idx) => idx % 10 === 0)
+        .map((p) => ({
+          lat: p.lat(),
+          lng: p.lng(),
+        }))
+      return { id: i, path: sampledPoints }
+    })
+
+    const response = await fetch(CROWD_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ routes: pathsToAnalyze }),
+    })
+
+    if (!response.ok) throw new Error('Crowd analysis API failed')
+    const data = await response.json()
+    return data.results || []
+  } catch (error) {
+    console.error('[Crowd Analysis] Error calling backend:', error)
+    return routes.map((_, i) => ({ id: i, socialScore: Math.floor(Math.random() * 100) }))
+  }
+}
+
 async function generateRoute() {
   routeError.value = ''
   routeSummary.value = ''
@@ -692,12 +776,28 @@ async function generateRoute() {
       result.routes.length > 1 &&
       (socialDensity.value !== 'normal' || shadeLevel.value !== 'normal')
     ) {
-      // Mock scores for each route
-      const scores = result.routes.map((_, i) => ({
-        index: i,
-        socialScore: Math.floor(Math.random() * 100), // higher = busier
-        shadeScore: Math.floor(Math.random() * 100), // higher = more shade
-      }))
+      // 1. Fetch real data from backend if needed
+      let shadeAnalysis = []
+      let crowdAnalysis = []
+
+      if (shadeLevel.value !== 'normal') {
+        shadeAnalysis = await fetchShadeAnalysis(result.routes)
+      }
+
+      if (socialDensity.value !== 'normal') {
+        crowdAnalysis = await fetchCrowdAnalysis(result.routes)
+      }
+
+      // 2. Rank alternatives
+      const scores = result.routes.map((_, i) => {
+        const shadeItem = shadeAnalysis.find((item) => item.id === i)
+        const crowdItem = crowdAnalysis.find((item) => item.id === i)
+        return {
+          index: i,
+          socialScore: crowdItem ? crowdItem.socialScore : Math.floor(Math.random() * 100), // higher = busier
+          shadeScore: shadeItem ? shadeItem.shadeScore : Math.floor(Math.random() * 100),
+        }
+      })
 
       // Ranking logic
       scores.sort((a, b) => {
@@ -718,7 +818,7 @@ async function generateRoute() {
         `[Route Selection] Preferences: Social=${socialDensity.value}, Shade=${shadeLevel.value}`,
       )
       console.log(
-        `[Route Selection] Best Route Index: ${bestRouteIndex} (Shade Score: ${bestScore.shadeScore}%, Social Score: ${bestScore.socialScore}%)`,
+        `[Route Selection] Best Route Selected Index: ${bestRouteIndex} (Shade: ${bestScore.shadeScore}%, Social: ${bestScore.socialScore}%)`,
       )
     }
 
