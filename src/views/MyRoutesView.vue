@@ -49,7 +49,6 @@ let endAutocomplete
 let geoWatchId = null
 
 const SHADE_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/analyze-shade' // TODO: Replace with actual backend URL
-const CROWD_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/analyze-crowds' // TODO: Replace with actual backend URL
 
 const TRAVEL_MODES = [
   { id: 'WALKING', label: 'Walking 🚶' },
@@ -520,6 +519,20 @@ function buildBenchesFetchUrl(params) {
   return `${base}/benches?${qs}`
 }
 
+/** POST target for pedestrian density scores; dev uses Vite proxy to avoid CORS. */
+function buildSocialScoreFetchUrl() {
+  const path = '/calculate-social-score'
+  if (import.meta.env.DEV) {
+    return `/__social-score${path}`
+  }
+  const base = (
+    import.meta.env.VITE_SOCIAL_SCORE_API_BASE ||
+    import.meta.env.VITE_COUNSELING_API_BASE ||
+    'https://gdxi2b3eqa.execute-api.ap-southeast-2.amazonaws.com/dev'
+  ).replace(/\/$/, '')
+  return `${base}${path}`
+}
+
 function createBenchMarker(bench) {
   if (!bench.lat || !bench.lng) return
 
@@ -726,41 +739,48 @@ async function fetchShadeAnalysis(routes) {
 /**
  * Fetches crowd density scores from the backend for multiple route alternatives.
  * @param {google.maps.DirectionsRoute[]} routes
+ * @returns {Promise<{ id: number, socialScore: number }[]>}
  */
 async function fetchCrowdAnalysis(routes) {
   if (!routes || routes.length === 0) return []
 
-  // Ensure actual endpoint is set
-  if (CROWD_API_URL === 'YOUR_LAMBDA_API_ENDPOINT/analyze-crowds') {
-    console.warn('[Crowd Analysis] No real API endpoint provided. Using fallback mocks.')
-    return routes.map((_, i) => ({ id: i, socialScore: Math.floor(Math.random() * 100) }))
+  const pathsToAnalyze = routes.map((route, i) => {
+    const allPoints = route.overview_path || []
+    let sampledPoints = allPoints
+      .filter((_, idx) => idx % 10 === 0)
+      .map((p) => ({
+        lat: p.lat(),
+        lng: p.lng(),
+      }))
+    if (sampledPoints.length === 0 && allPoints.length > 0) {
+      sampledPoints = allPoints.map((p) => ({ lat: p.lat(), lng: p.lng() }))
+    }
+    return { id: i, path: sampledPoints }
+  })
+
+  const url = buildSocialScoreFetchUrl()
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ routes: pathsToAnalyze }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Pedestrian score service failed (${response.status}).`)
   }
 
-  try {
-    const pathsToAnalyze = routes.map((route, i) => {
-      const allPoints = route.overview_path || []
-      const sampledPoints = allPoints
-        .filter((_, idx) => idx % 10 === 0)
-        .map((p) => ({
-          lat: p.lat(),
-          lng: p.lng(),
-        }))
-      return { id: i, path: sampledPoints }
-    })
-
-    const response = await fetch(CROWD_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ routes: pathsToAnalyze }),
-    })
-
-    if (!response.ok) throw new Error('Crowd analysis API failed')
-    const data = await response.json()
-    return data.results || []
-  } catch (error) {
-    console.error('[Crowd Analysis] Error calling backend:', error)
-    return routes.map((_, i) => ({ id: i, socialScore: Math.floor(Math.random() * 100) }))
+  const data = await response.json()
+  const raw = Array.isArray(data.results) ? data.results : []
+  const byId = new Map(raw.map((row) => [row.id, row]))
+  const normalized = []
+  for (let i = 0; i < routes.length; i++) {
+    const row = byId.get(i)
+    if (row == null || typeof row.socialScore !== 'number' || Number.isNaN(row.socialScore)) {
+      throw new Error('Pedestrian score service returned incomplete results.')
+    }
+    normalized.push({ id: i, socialScore: row.socialScore })
   }
+  return normalized
 }
 
 async function generateRoute() {
@@ -803,6 +823,8 @@ async function generateRoute() {
 
     // Select route based on socialDensity and shadeLevel preferences
     let bestRouteIndex = 0
+    /** Crowd scores from API when social preference is used (for summary display). */
+    let crowdAnalysisForSummary = []
     if (
       result.routes.length > 1 &&
       (socialDensity.value !== 'normal' || shadeLevel.value !== 'normal')
@@ -817,16 +839,29 @@ async function generateRoute() {
 
       if (socialDensity.value !== 'normal') {
         crowdAnalysis = await fetchCrowdAnalysis(result.routes)
+        crowdAnalysisForSummary = crowdAnalysis
       }
 
       // 2. Rank alternatives
       const scores = result.routes.map((_, i) => {
         const shadeItem = shadeAnalysis.find((item) => item.id === i)
         const crowdItem = crowdAnalysis.find((item) => item.id === i)
+        let socialScore = 0
+        if (socialDensity.value !== 'normal') {
+          if (!crowdItem || typeof crowdItem.socialScore !== 'number') {
+            throw new Error('Could not get pedestrian scores for all route options.')
+          }
+          socialScore = crowdItem.socialScore
+        }
+        const shadeScore = shadeItem
+          ? shadeItem.shadeScore
+          : shadeLevel.value !== 'normal'
+            ? Math.floor(Math.random() * 100)
+            : 0
         return {
           index: i,
-          socialScore: crowdItem ? crowdItem.socialScore : Math.floor(Math.random() * 100), // higher = busier
-          shadeScore: shadeItem ? shadeItem.shadeScore : Math.floor(Math.random() * 100),
+          socialScore,
+          shadeScore,
         }
       })
 
@@ -868,6 +903,12 @@ async function generateRoute() {
       }
       if (socialDensity.value !== 'normal') {
         preferenceLabel += ` · ${socialDensity.value === 'quiet' ? 'Quiet' : 'Busy'}`
+        const crowdRow = crowdAnalysisForSummary.find((c) => c.id === bestRouteIndex)
+        if (crowdRow && typeof crowdRow.socialScore === 'number') {
+          const s = crowdRow.socialScore
+          const label = Number.isInteger(s) ? String(s) : s.toFixed(1)
+          preferenceLabel += ` · Pedestrian score ${label}`
+        }
       }
 
       routeSummary.value = dist && dur ? `${dist} · ${dur}${preferenceLabel}` : dist || dur
