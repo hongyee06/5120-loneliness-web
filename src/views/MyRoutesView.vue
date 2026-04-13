@@ -48,7 +48,6 @@ let endAutocomplete
 /** @type {number | null} */
 let geoWatchId = null
 
-const BENCH_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/benches' // TODO: Replace with actual backend URL
 const SHADE_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/analyze-shade' // TODO: Replace with actual backend URL
 const CROWD_API_URL = 'YOUR_LAMBDA_API_ENDPOINT/analyze-crowds' // TODO: Replace with actual backend URL
 
@@ -60,6 +59,14 @@ const TRAVEL_MODES = [
 ]
 
 const MELBOURNE = { lat: -37.8136, lng: 144.9631 }
+
+/** Bbox for GET /benches: dataset lives in Melbourne city; do not shrink to route bounds or distant routes miss the API window. */
+const MELBOURNE_CITY_BENCH_BOUNDS = {
+  minLat: -37.84,
+  maxLat: -37.78,
+  minLng: 144.9,
+  maxLng: 145.02,
+}
 
 function loadGoogleMapsApi() {
   if (window.google?.maps) return Promise.resolve(window.google.maps)
@@ -413,14 +420,35 @@ function getRoutePath(route) {
   return points.length > 0 ? points : route.overview_path || []
 }
 
-function isNearRoutePath(location, routePath, maxDistanceMeters = 120) {
-  if (!window.google?.maps?.geometry?.spherical || !location || routePath.length === 0) return false
+/** Minimum geodesic distance from a point to the route polyline (sampled along segments; not just vertices). */
+function minDistanceMetersToRoutePolyline(location, routePath) {
+  const geom = window.google?.maps?.geometry?.spherical
+  if (!geom || !location || routePath.length === 0) return Number.POSITIVE_INFINITY
 
-  for (const point of routePath) {
-    const distance = window.google.maps.geometry.spherical.computeDistanceBetween(location, point)
-    if (distance <= maxDistanceMeters) return true
+  const loc =
+    typeof location.lat === 'function'
+      ? location
+      : new window.google.maps.LatLng(location.lat, location.lng)
+
+  let minDist = Number.POSITIVE_INFINITY
+  for (let i = 0; i < routePath.length - 1; i++) {
+    const a = routePath[i]
+    const b = routePath[i + 1]
+    const segLen = geom.computeDistanceBetween(a, b)
+    const stepMeters = 25
+    const steps = Math.min(8000, Math.max(1, Math.ceil(segLen / stepMeters)))
+    for (let s = 0; s <= steps; s++) {
+      const p = geom.interpolate(a, b, s / steps)
+      const d = geom.computeDistanceBetween(loc, p)
+      if (d < minDist) minDist = d
+    }
   }
-  return false
+  return minDist
+}
+
+function isNearRoutePath(location, routePath, maxDistanceMeters = 120) {
+  if (!location || routePath.length === 0) return false
+  return minDistanceMetersToRoutePolyline(location, routePath) <= maxDistanceMeters
 }
 
 function searchToiletsForRoute(route) {
@@ -478,6 +506,20 @@ function clearBenchMarkers() {
   benchMarkers = []
 }
 
+/** Same-origin in dev (Vite proxy); absolute URL in production. */
+function buildBenchesFetchUrl(params) {
+  const qs = params.toString()
+  if (import.meta.env.DEV) {
+    return `/__counseling/benches?${qs}`
+  }
+  const base = (
+    import.meta.env.VITE_BENCHES_API_BASE ||
+    import.meta.env.VITE_COUNSELING_API_BASE ||
+    'https://gdxi2b3eqa.execute-api.ap-southeast-2.amazonaws.com/dev'
+  ).replace(/\/$/, '')
+  return `${base}/benches?${qs}`
+}
+
 function createBenchMarker(bench) {
   if (!bench.lat || !bench.lng) return
 
@@ -516,7 +558,7 @@ function createBenchMarker(bench) {
 }
 
 /**
- * Fetches bench data from the backend based on route bounds
+ * Fetches benches for Melbourne city from the backend, then keeps only points near the route polyline.
  */
 async function fetchBenchesForRoute(route) {
   clearBenchMarkers()
@@ -525,53 +567,42 @@ async function fetchBenchesForRoute(route) {
     return
   }
 
-  const bounds = route.bounds
-  if (!bounds) {
+  const routePath = getRoutePath(route)
+  if (routePath.length === 0) {
     noBenchesFound.value = true
     return
   }
 
-  const ne = bounds.getNorthEast()
-  const sw = bounds.getSouthWest()
-  const routePath = getRoutePath(route)
-
   try {
-    // Construct search params based on bounding box
     const params = new URLSearchParams({
-      minLat: sw.lat(),
-      maxLat: ne.lat(),
-      minLng: sw.lng(),
-      maxLng: ne.lng(),
+      minLat: String(MELBOURNE_CITY_BENCH_BOUNDS.minLat),
+      maxLat: String(MELBOURNE_CITY_BENCH_BOUNDS.maxLat),
+      minLng: String(MELBOURNE_CITY_BENCH_BOUNDS.minLng),
+      maxLng: String(MELBOURNE_CITY_BENCH_BOUNDS.maxLng),
     })
 
-    // In a real scenario, use fetch(BENCH_API_URL + '?' + params)
-    // For now, we keep it as a placeholder or use mock data if needed
-    console.log('[Benches] Fetching for bounds:', params.toString())
-
-    // MOCK DATA: Generate 3-5 random benches within the bounds for demonstration
-    const mockBenches = []
-    const count = 3 + Math.floor(Math.random() * 3)
-    for (let i = 0; i < count; i++) {
-      mockBenches.push({
-        id: `mock-${i}`,
-        lat: sw.lat() + Math.random() * (ne.lat() - sw.lat()),
-        lng: sw.lng() + Math.random() * (ne.lng() - sw.lng()),
-        desc:
-          ['Timber Bench', 'Steel Bench', 'Park Seat'][Math.floor(Math.random() * 3)] +
-          ' - Near tree',
-      })
+    const response = await fetch(buildBenchesFetchUrl(params))
+    if (!response.ok) throw new Error(`Failed to fetch benches (HTTP ${response.status})`)
+    const raw = await response.text()
+    // Backend may emit NaN/Infinity for numeric fields; those are not valid JSON.
+    const payload = JSON.parse(
+      raw
+        .replace(/\bNaN\b/g, 'null')
+        .replace(/-Infinity\b/g, 'null')
+        .replace(/\bInfinity\b/g, 'null'),
+    )
+    if (payload?.status !== 'success' || !Array.isArray(payload?.data)) {
+      throw new Error('Unexpected benches API response')
     }
 
-    // In a real scenario, use actual fetch:
-    let benchData = []
-    if (BENCH_API_URL !== 'YOUR_LAMBDA_API_ENDPOINT/benches') {
-      const response = await fetch(`${BENCH_API_URL}?${params}`)
-      if (!response.ok) throw new Error('Failed to fetch benches')
-      benchData = await response.json()
-    } else {
-      // Use mock data for demo
-      benchData = mockBenches
-    }
+    const benchData = payload.data.map((row) => ({
+      lat: row.latitude,
+      lng: row.longitude,
+      desc: row.description ?? '',
+    }))
+
+    // Wider than toilets: footpaths offset from the road centreline; polyline follows carriageway.
+    const benchMaxDistanceMeters = 240
 
     const nearbyBenches = benchData.filter((bench) => {
       if (bench.lat === undefined || bench.lng === undefined) return false
@@ -579,7 +610,7 @@ async function fetchBenchesForRoute(route) {
       const lng = Number(bench.lng)
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
       const position = new window.google.maps.LatLng(lat, lng)
-      return isNearRoutePath(position, routePath)
+      return isNearRoutePath(position, routePath, benchMaxDistanceMeters)
     })
 
     noBenchesFound.value = nearbyBenches.length === 0
