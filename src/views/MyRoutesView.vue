@@ -949,7 +949,11 @@ async function generateRoute() {
         }
         let shadeScore = 0
         if (shadeLevel.value !== 'normal' && !shadeRankingSkipped) {
-          if (!shadeItem || typeof shadeItem.shadeScore !== 'number' || Number.isNaN(shadeItem.shadeScore)) {
+          if (
+            !shadeItem ||
+            typeof shadeItem.shadeScore !== 'number' ||
+            Number.isNaN(shadeItem.shadeScore)
+          ) {
             throw new Error('Could not get shade scores for all route options.')
           }
           shadeScore = shadeItem.shadeScore
