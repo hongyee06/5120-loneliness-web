@@ -534,7 +534,7 @@ async function applyAddressFilter() {
 }
 
 function onQueryInput() {
-  // 用户手动修改输入内容后，清除上一次建议项选中的坐标，避免错配。
+  // Clear the previously selected suggestion coordinates after manual input changes to avoid mismatches.
   queryPlace.value = null
 }
 
@@ -705,7 +705,11 @@ onMounted(async () => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 18px 24px 24px;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    sans-serif;
 }
 
 .top-bar {
