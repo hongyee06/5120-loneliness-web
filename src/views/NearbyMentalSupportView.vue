@@ -711,7 +711,7 @@ onMounted(async () => {
   display: flex;
   gap: 12px;
   margin-bottom: 14px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .search-wrapper {
