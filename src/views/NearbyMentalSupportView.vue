@@ -699,7 +699,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* Navbar 60px + page padding + top bar — match usable map height to route planning (viewport-based). */
 .page {
   --nearby-map-height: calc(100vh - 160px);
   max-width: 1400px;
