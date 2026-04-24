@@ -23,6 +23,7 @@ const RADIUS_OPTIONS = [
   { meters: 500, label: '500 m' },
   { meters: 1000, label: '1 km' },
   { meters: 2000, label: '2 km' },
+  { meters: 3000, label: 'Exceed 2 km' },
 ]
 
 const DEFAULT_CATEGORY_KEYS = CATEGORY_OPTIONS.map((option) => option.key)
@@ -250,6 +251,28 @@ const activeDetailPlace = ref(null)
 const detailPanelState = ref('closed') // closed | opening | open | closing
 const pendingDetailPlace = ref(null)
 const directionsError = ref('')
+const isIdeasModalOpen = ref(false)
+const ideasStep = ref(1)
+const ideasTransportMode = ref('')
+const ideasCategoryAnswers = ref([])
+
+const IDEAS_CATEGORY_CHOICES = [
+  {
+    key: 'history_story',
+    label: 'I want history stories and iconic city sights',
+    categoryKey: 'landmarks',
+  },
+  {
+    key: 'creative_relax',
+    label: 'I want creative vibes, artworks, and waterside views',
+    categoryKey: 'artworks_fountains',
+  },
+  {
+    key: 'quiet_reflect',
+    label: 'I want a quiet, reflective walk with memorial spaces',
+    categoryKey: 'memorials_sculptures',
+  },
+]
 
 function pickFirstDefined(...values) {
   for (const value of values) {
@@ -518,7 +541,7 @@ const showNoMatchHint = computed(
     !!userLocation.value,
 )
 
-const canExpandTo2Km = computed(() => showNoMatchHint.value && selectedRadius.value < 2000)
+const canExpandToExceed2Km = computed(() => showNoMatchHint.value && selectedRadius.value < 3000)
 const isDetailPanelVisible = computed(() => detailPanelState.value !== 'closed')
 const isDetailCategoryRich = computed(
   () => !!activeDetailPlace.value && activeDetailPlace.value.categoryKey !== 'landmarks',
@@ -549,7 +572,45 @@ function goToPage(page) {
 }
 
 function expandTo2Km() {
-  selectRadius(2000)
+  selectRadius(3000)
+}
+
+function openIdeasModal() {
+  isIdeasModalOpen.value = true
+  ideasStep.value = 1
+  ideasTransportMode.value = ''
+  ideasCategoryAnswers.value = []
+}
+
+function closeIdeasModal() {
+  isIdeasModalOpen.value = false
+}
+
+function goToIdeasStep(step) {
+  ideasStep.value = step
+}
+
+function toggleIdeasCategory(choiceKey) {
+  if (ideasCategoryAnswers.value.includes(choiceKey)) {
+    ideasCategoryAnswers.value = ideasCategoryAnswers.value.filter((item) => item !== choiceKey)
+    return
+  }
+  ideasCategoryAnswers.value = [...ideasCategoryAnswers.value, choiceKey]
+}
+
+function applyIdeasAnswers() {
+  if (!ideasCategoryAnswers.value.length || !ideasTransportMode.value) return
+
+  const resolvedCategories = IDEAS_CATEGORY_CHOICES.filter((item) =>
+    ideasCategoryAnswers.value.includes(item.key),
+  ).map((item) => item.categoryKey)
+  const uniqueCategoryKeys = [...new Set(resolvedCategories)]
+  if (!uniqueCategoryKeys.length) return
+
+  selectedCategories.value = uniqueCategoryKeys
+  selectRadius(ideasTransportMode.value === 'walking' ? 500 : 3000)
+  currentPage.value = 1
+  closeIdeasModal()
 }
 
 let detailTransitionTimeoutId = null
@@ -626,7 +687,12 @@ function openDirections() {
 }
 
 function onGlobalKeydown(event) {
-  if (event.key === 'Escape') closeDetailPanel()
+  if (event.key !== 'Escape') return
+  if (isIdeasModalOpen.value) {
+    closeIdeasModal()
+    return
+  }
+  closeDetailPanel()
 }
 
 let geocoder = null
@@ -825,37 +891,45 @@ onUnmounted(() => {
       <p v-if="addressFilterError" class="address-error">{{ addressFilterError }}</p>
 
       <section class="filters-area">
-        <div class="filters-row">
-          <p class="filters-label">Category</p>
-          <div class="chip-group">
-            <button
-              v-for="category in CATEGORY_OPTIONS"
-              :key="category.key"
-              type="button"
-              class="chip"
-              :class="{ selected: selectedCategorySet.has(category.key) }"
-              :aria-pressed="selectedCategorySet.has(category.key)"
-              @click="toggleCategory(category.key)"
-            >
-              {{ category.label }}
-            </button>
-          </div>
-        </div>
+        <div class="filters-content">
+          <div class="filters-main">
+            <div class="filters-row">
+              <p class="filters-label">Category</p>
+              <div class="chip-group">
+                <button
+                  v-for="category in CATEGORY_OPTIONS"
+                  :key="category.key"
+                  type="button"
+                  class="chip"
+                  :class="{ selected: selectedCategorySet.has(category.key) }"
+                  :aria-pressed="selectedCategorySet.has(category.key)"
+                  @click="toggleCategory(category.key)"
+                >
+                  {{ category.label }}
+                </button>
+              </div>
+            </div>
 
-        <div class="filters-row">
-          <p class="filters-label">Radius</p>
-          <div class="chip-group">
-            <button
-              v-for="radius in RADIUS_OPTIONS"
-              :key="radius.meters"
-              type="button"
-              class="chip radius-chip"
-              :class="{ selected: selectedRadius === radius.meters }"
-              :aria-pressed="selectedRadius === radius.meters"
-              @click="selectRadius(radius.meters)"
-            >
-              {{ radius.label }}
-            </button>
+            <div class="filters-row">
+              <p class="filters-label">Radius</p>
+              <div class="chip-group">
+                <button
+                  v-for="radius in RADIUS_OPTIONS"
+                  :key="radius.meters"
+                  type="button"
+                  class="chip radius-chip"
+                  :class="{ selected: selectedRadius === radius.meters }"
+                  :aria-pressed="selectedRadius === radius.meters"
+                  @click="selectRadius(radius.meters)"
+                >
+                  {{ radius.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ideas-cta-wrap">
+            <button type="button" class="ideas-cta-btn" @click="openIdeasModal">On ideas?</button>
           </div>
         </div>
       </section>
@@ -878,8 +952,8 @@ onUnmounted(() => {
 
       <div v-else-if="showNoMatchHint" class="empty-state">
         <p>No places match these filters. Try a wider distance or more categories.</p>
-        <button v-if="canExpandTo2Km" type="button" class="action-link" @click="expandTo2Km">
-          Expand to 2 km
+        <button v-if="canExpandToExceed2Km" type="button" class="action-link" @click="expandTo2Km">
+          Expand to exceed 2 km
         </button>
       </div>
 
@@ -931,6 +1005,76 @@ onUnmounted(() => {
         </button>
       </nav>
     </section>
+
+    <div v-if="isIdeasModalOpen" class="ideas-overlay" @click="closeIdeasModal">
+      <section class="ideas-modal" role="dialog" aria-modal="true" aria-label="Trip ideas survey" @click.stop>
+        <header class="ideas-header">
+          <h2>Quick ideas survey</h2>
+          <button type="button" class="ideas-close-btn" @click="closeIdeasModal">Close</button>
+        </header>
+
+        <Transition name="ideas-step" mode="out-in">
+          <div v-if="ideasStep === 1" :key="'step-1'" class="ideas-body">
+            <p class="ideas-question">Do you prefer driving or walking?</p>
+            <div class="ideas-option-group">
+              <button
+                type="button"
+                class="ideas-option-btn"
+                :class="{ selected: ideasTransportMode === 'walking' }"
+                @click="ideasTransportMode = 'walking'"
+              >
+                Walking
+              </button>
+              <button
+                type="button"
+                class="ideas-option-btn"
+                :class="{ selected: ideasTransportMode === 'driving' }"
+                @click="ideasTransportMode = 'driving'"
+              >
+                Driving
+              </button>
+            </div>
+            <div class="ideas-actions">
+              <button
+                type="button"
+                class="ideas-next-btn"
+                :disabled="!ideasTransportMode"
+                @click="goToIdeasStep(2)"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
+          <div v-else :key="'step-2'" class="ideas-body">
+            <p class="ideas-question">What kind of places would you enjoy exploring right now? (Multi-select)</p>
+            <div class="ideas-option-group column">
+              <button
+                v-for="choice in IDEAS_CATEGORY_CHOICES"
+                :key="choice.key"
+                type="button"
+                class="ideas-option-btn text-left"
+                :class="{ selected: ideasCategoryAnswers.includes(choice.key) }"
+                @click="toggleIdeasCategory(choice.key)"
+              >
+                {{ choice.label }}
+              </button>
+            </div>
+            <div class="ideas-actions split">
+              <button type="button" class="ideas-secondary-btn" @click="goToIdeasStep(1)">Back</button>
+              <button
+                type="button"
+                class="ideas-next-btn"
+                :disabled="!ideasCategoryAnswers.length"
+                @click="applyIdeasAnswers"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </Transition>
+      </section>
+    </div>
 
     <div
       v-if="isDetailPanelVisible"
@@ -1113,10 +1257,49 @@ onUnmounted(() => {
 }
 
 .filters-area {
+  margin-bottom: 10px;
+}
+
+.filters-content {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.filters-main {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-bottom: 10px;
+}
+
+.ideas-cta-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+}
+
+.ideas-cta-btn {
+  border: none;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  color: #ffffff;
+  border-radius: 999px;
+  min-height: 40px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.ideas-cta-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 12px 24px rgba(239, 68, 68, 0.3);
 }
 
 .filters-row {
@@ -1343,6 +1526,159 @@ onUnmounted(() => {
   z-index: 1200;
 }
 
+.ideas-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  background: rgba(2, 6, 23, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.ideas-modal {
+  width: min(560px, 96vw);
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 25px 55px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.ideas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ideas-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.ideas-close-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1f2937;
+  border-radius: 10px;
+  min-height: 36px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ideas-body {
+  padding: 18px;
+}
+
+.ideas-step-enter-active,
+.ideas-step-leave-active {
+  transition:
+    opacity 0.26s ease,
+    transform 0.26s ease;
+}
+
+.ideas-step-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.99);
+}
+
+.ideas-step-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.99);
+}
+
+.ideas-question {
+  margin: 0 0 14px;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ideas-option-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ideas-option-group.column {
+  flex-direction: column;
+}
+
+.ideas-option-btn {
+  border: 2px solid #cbd5e1;
+  background: #ffffff;
+  color: #1f2937;
+  border-radius: 12px;
+  min-height: 42px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.ideas-option-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.ideas-option-btn.text-left {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.ideas-option-btn.selected {
+  background: #16a34a;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+.ideas-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ideas-actions.split {
+  justify-content: space-between;
+}
+
+.ideas-next-btn,
+.ideas-secondary-btn {
+  border: none;
+  border-radius: 10px;
+  min-height: 40px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ideas-next-btn {
+  background: #166534;
+  color: #ffffff;
+}
+
+.ideas-next-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ideas-secondary-btn {
+  background: #e2e8f0;
+  color: #1f2937;
+}
+
 .details-overlay.visible {
   opacity: 1;
 }
@@ -1492,6 +1828,15 @@ onUnmounted(() => {
 
   .location-toolbar {
     flex-wrap: wrap;
+  }
+
+  .filters-content {
+    flex-direction: column;
+  }
+
+  .ideas-cta-wrap {
+    justify-content: flex-start;
+    min-width: 0;
   }
 
   .details-panel {
