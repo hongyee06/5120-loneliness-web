@@ -28,206 +28,8 @@ const RADIUS_OPTIONS = [
 
 const DEFAULT_CATEGORY_KEYS = CATEGORY_OPTIONS.map((option) => option.key)
 const DEFAULT_RADIUS = 1000
-
-const MOCK_DISCOVER_PLACES = [
-  // Landmarks
-  {
-    place_id: 'lm-001',
-    place_name: 'Flinders Street Station',
-    category: 'Landmarks',
-    latitude: -37.8183,
-    longitude: 144.9671,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/places/flinders-street-station',
-  },
-  {
-    place_id: 'lm-002',
-    place_name: 'Royal Exhibition Building',
-    category: 'Landmarks',
-    latitude: -37.8049,
-    longitude: 144.9717,
-    more_info_url: 'https://museumsvictoria.com.au/reb/',
-  },
-  {
-    place_id: 'lm-003',
-    place_name: 'State Library Victoria',
-    category: 'Landmarks',
-    latitude: -37.8097,
-    longitude: 144.9653,
-    more_info_url: 'https://www.slv.vic.gov.au/',
-  },
-  {
-    place_id: 'lm-004',
-    place_name: 'Parliament House',
-    category: 'Landmarks',
-    latitude: -37.8111,
-    longitude: 144.9737,
-    more_info_url: 'https://www.parliament.vic.gov.au/visit/',
-  },
-  {
-    place_id: 'lm-005',
-    place_name: 'Melbourne Town Hall',
-    category: 'Landmarks',
-    latitude: -37.8149,
-    longitude: 144.9662,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/places/melbourne-town-hall',
-  },
-  {
-    place_id: 'lm-006',
-    place_name: 'Queen Victoria Market',
-    category: 'Landmarks',
-    latitude: -37.8076,
-    longitude: 144.9568,
-    more_info_url: 'https://qvm.com.au/',
-  },
-  {
-    place_id: 'lm-007',
-    place_name: 'Federation Square',
-    category: 'Landmarks',
-    latitude: -37.8179,
-    longitude: 144.9691,
-    more_info_url: 'https://fedsquare.com/',
-  },
-  {
-    place_id: 'lm-008',
-    place_name: 'Old Treasury Building',
-    category: 'Landmarks',
-    latitude: -37.8133,
-    longitude: 144.9737,
-    more_info_url: 'https://www.oldtreasurybuilding.org.au/',
-  },
-
-  // Artworks & fountains
-  {
-    place_id: 'art-001',
-    place_name: 'River God Fountain',
-    category: 'Artworks & Fountains',
-    latitude: -37.8101,
-    longitude: 144.9629,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/places/river-god-fountain',
-  },
-  {
-    place_id: 'art-002',
-    place_name: 'Fitzroy Gardens Fountain',
-    category: 'Artworks & Fountains',
-    latitude: -37.8132,
-    longitude: 144.9796,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/places/fitzroy-gardens',
-  },
-  {
-    place_id: 'art-003',
-    place_name: 'Vault Sculpture',
-    category: 'Artworks & Fountains',
-    latitude: -37.8217,
-    longitude: 144.9682,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/places/vault-sculpture',
-  },
-  {
-    place_id: 'art-004',
-    place_name: 'Water Wall at Birrarung Marr',
-    category: 'Artworks & Fountains',
-    latitude: -37.8188,
-    longitude: 144.9735,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'art-005',
-    place_name: 'Public Purse Sculpture',
-    category: 'Artworks & Fountains',
-    latitude: -37.8157,
-    longitude: 144.9624,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'art-006',
-    place_name: 'Cow Up a Tree',
-    category: 'Artworks & Fountains',
-    latitude: -37.8118,
-    longitude: 144.9636,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'art-007',
-    place_name: 'Williamstown Road Fountain Replica',
-    category: 'Artworks & Fountains',
-    latitude: -37.8168,
-    longitude: 144.9558,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'art-008',
-    place_name: 'ArtPlay Riverside Installation',
-    category: 'Artworks & Fountains',
-    latitude: -37.8194,
-    longitude: 144.9702,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/places/artplay',
-  },
-
-  // Memorials & sculptures
-  {
-    place_id: 'mem-001',
-    place_name: 'Shrine of Remembrance',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8305,
-    longitude: 144.9734,
-    more_info_url: 'https://www.shrine.org.au/',
-  },
-  {
-    place_id: 'mem-002',
-    place_name: 'Burke and Wills Monument',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8142,
-    longitude: 144.9672,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'mem-003',
-    place_name: 'Sir Redmond Barry Statue',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8103,
-    longitude: 144.9656,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'mem-004',
-    place_name: 'Eight Hour Day Monument',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8128,
-    longitude: 144.9731,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'mem-005',
-    place_name: 'Kings Domain Memorial Garden',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8258,
-    longitude: 144.9739,
-    more_info_url: 'https://www.shrine.org.au/visit/memorial-garden',
-  },
-  {
-    place_id: 'mem-006',
-    place_name: 'Pioneer Women’s Memorial',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8212,
-    longitude: 144.9728,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'mem-007',
-    place_name: 'The Pathfinder Sculpture',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8172,
-    longitude: 144.9628,
-    more_info_url: 'https://whatson.melbourne.vic.gov.au/',
-  },
-  {
-    place_id: 'mem-008',
-    place_name: 'Anzac Commemorative Marker',
-    category: 'Memorials & Sculptures',
-    latitude: -37.8287,
-    longitude: 144.9751,
-    more_info_url: 'https://www.shrine.org.au/',
-  },
-]
+const DISCOVER_API_BASE_URL = 'https://j5d3dob643.execute-api.ap-southeast-2.amazonaws.com'
+const DISCOVER_DEFAULT_LIMIT = 200
 
 const categoryMetaByKey = CATEGORY_OPTIONS.reduce((acc, option) => {
   acc[option.key] = option
@@ -255,6 +57,8 @@ const isIdeasModalOpen = ref(false)
 const ideasStep = ref(1)
 const ideasTransportMode = ref('')
 const ideasCategoryAnswers = ref([])
+const detailById = ref(new Map())
+const loadingDetailIds = ref(new Set())
 
 const IDEAS_CATEGORY_CHOICES = [
   {
@@ -328,8 +132,9 @@ function normalizeCategory(rawCategory) {
     .replace(/[_-]+/g, ' ')
   if (text.includes('landmark')) return 'landmarks'
   if (text.includes('art') || text.includes('fountain')) return 'artworks_fountains'
-  if (text.includes('memorial') || text.includes('sculpture')) return 'memorials_sculptures'
-  return null
+  if (text.includes('memorial') || text.includes('sculpture') || text.includes('monument'))
+    return 'memorials_sculptures'
+  return 'landmarks'
 }
 
 function normalizePlace(input, index) {
@@ -447,6 +252,15 @@ function formatDistance(distanceMeters) {
   return `Approx. ${(distanceMeters / 1000).toFixed(1)} km`
 }
 
+function isPlaceWithinSelectedRadiusBand(distanceMeters) {
+  if (typeof distanceMeters !== 'number') return false
+  if (selectedRadius.value === 500) return distanceMeters <= 500
+  if (selectedRadius.value === 1000) return distanceMeters > 500 && distanceMeters <= 1000
+  if (selectedRadius.value === 2000) return distanceMeters > 1000 && distanceMeters <= 2000
+  if (selectedRadius.value === 3000) return distanceMeters > 2000
+  return false
+}
+
 function parsePlacesPayload(payload) {
   const normalized = normalizeApiPayload(payload)
   if (Array.isArray(normalized)) return normalized
@@ -455,7 +269,21 @@ function parsePlacesPayload(payload) {
   if (Array.isArray(normalized?.items)) return normalized.items
   if (Array.isArray(normalized?.results)) return normalized.results
   if (Array.isArray(normalized?.records)) return normalized.records
+  if (normalized && typeof normalized === 'object') return [normalized]
   return []
+}
+
+function buildPlacesApiUrl() {
+  const configuredBase = String(import.meta.env.VITE_DISCOVER_PLACES_API_BASE_URL || '').trim()
+  const baseUrl = configuredBase || DISCOVER_API_BASE_URL
+  const endpoint = new URL('/places', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`)
+  endpoint.searchParams.set('limit', String(DISCOVER_DEFAULT_LIMIT))
+  endpoint.searchParams.set('radius', String(selectedRadius.value))
+  if (userLocation.value) {
+    endpoint.searchParams.set('lat', String(userLocation.value.lat))
+    endpoint.searchParams.set('lng', String(userLocation.value.lng))
+  }
+  return endpoint.toString()
 }
 
 function readSessionState() {
@@ -511,16 +339,20 @@ const filteredPlaces = computed(() => {
     selectedCategorySet.value.has(place.categoryKey),
   )
 
-  if (!userLocation.value) {
-    return [...byCategory].sort((a, b) => a.name.localeCompare(b.name))
+  const withDistance = byCategory.filter((place) => typeof place.distanceMeters === 'number')
+  const withoutDistance = byCategory.filter((place) => typeof place.distanceMeters !== 'number')
+
+  const radiusMatched = withDistance.filter((place) =>
+    isPlaceWithinSelectedRadiusBand(place.distanceMeters),
+  )
+  if (radiusMatched.length > 0) {
+    return radiusMatched.sort((a, b) => a.distanceMeters - b.distanceMeters)
   }
 
-  return byCategory
-    .filter(
-      (place) =>
-        typeof place.distanceMeters === 'number' && place.distanceMeters <= selectedRadius.value,
-    )
-    .sort((a, b) => a.distanceMeters - b.distanceMeters)
+  // If distance is unavailable for all places, keep a stable name-sorted fallback list.
+  if (!withDistance.length) return withoutDistance.sort((a, b) => a.name.localeCompare(b.name))
+
+  return []
 })
 
 const totalPlaces = computed(() => filteredPlaces.value.length)
@@ -546,10 +378,20 @@ const isDetailPanelVisible = computed(() => detailPanelState.value !== 'closed')
 const isDetailCategoryRich = computed(
   () => !!activeDetailPlace.value && activeDetailPlace.value.categoryKey !== 'landmarks',
 )
+let placesRequestSeq = 0
 
 watch(filteredPlaces, () => {
   if (currentPage.value > totalPages.value) currentPage.value = 1
 })
+
+watch(
+  [userLocation, selectedRadius],
+  () => {
+    if (isLoadingPlaces.value) return
+    loadPlaces()
+  },
+  { deep: true },
+)
 
 function toggleCategory(categoryKey) {
   if (selectedCategorySet.value.has(categoryKey)) {
@@ -564,6 +406,11 @@ function selectRadius(radiusMeters) {
   if (selectedRadius.value === radiusMeters) return
   selectedRadius.value = radiusMeters
   currentPage.value = 1
+}
+
+async function applyFilters() {
+  currentPage.value = 1
+  await loadPlaces()
 }
 
 function goToPage(page) {
@@ -618,6 +465,42 @@ async function applyIdeasAnswers() {
   closeIdeasModal()
 }
 
+async function loadPlaceDetail(place) {
+  if (!place?.id || loadingDetailIds.value.has(place.id) || detailById.value.has(place.id)) return
+  loadingDetailIds.value.add(place.id)
+  try {
+    const configuredBase = String(import.meta.env.VITE_DISCOVER_PLACES_API_BASE_URL || '').trim()
+    const baseUrl = configuredBase || DISCOVER_API_BASE_URL
+    const detailUrl = new URL(`/places/${encodeURIComponent(place.id)}`, baseUrl).toString()
+    const response = await fetch(detailUrl)
+    if (!response.ok) throw new Error(`Failed to load place detail (${response.status})`)
+    const detailPayload = parsePlacesPayload(await response.json())[0]
+    const normalizedDetail = normalizePlace(detailPayload, 0)
+    if (!normalizedDetail) return
+
+    detailById.value.set(place.id, normalizedDetail)
+    allPlaces.value = allPlaces.value.map((item) =>
+      item.id === place.id
+        ? {
+            ...item,
+            ...normalizedDetail,
+            categoryKey: item.categoryKey,
+            categoryLabel: item.categoryLabel,
+            icon: item.icon,
+          }
+        : item,
+    )
+    if (activeDetailPlace.value?.id === place.id) {
+      activeDetailPlace.value =
+        allPlaces.value.find((item) => item.id === place.id) || activeDetailPlace.value
+    }
+  } catch (error) {
+    console.error('[Discover Places] Failed to load place detail:', error)
+  } finally {
+    loadingDetailIds.value.delete(place.id)
+  }
+}
+
 let detailTransitionTimeoutId = null
 
 function clearDetailTransitionTimeout() {
@@ -654,16 +537,15 @@ function closeDetailPanel() {
   }, 320)
 }
 
-function openMoreInfo(place) {
+async function openMoreInfo(place) {
   if (detailPanelState.value === 'closed') {
     openDetailPanel(place)
-    return
+  } else {
+    if (activeDetailPlace.value?.id === place.id && detailPanelState.value === 'open') return
+    pendingDetailPlace.value = place
+    closeDetailPanel()
   }
-
-  if (activeDetailPlace.value?.id === place.id && detailPanelState.value === 'open') return
-
-  pendingDetailPlace.value = place
-  closeDetailPanel()
+  await loadPlaceDetail(place)
 }
 
 function buildDirectionsUrl(place) {
@@ -823,26 +705,23 @@ async function useMyLocation() {
 }
 
 async function loadPlaces() {
+  const requestId = ++placesRequestSeq
   isLoadingPlaces.value = true
   loadError.value = ''
   try {
-    const configured = String(import.meta.env.VITE_DISCOVER_PLACES_API_URL || '').trim()
-    let payload = []
-
-    if (configured) {
-      const response = await fetch(configured)
-      if (!response.ok) throw new Error(`Failed to load places (${response.status})`)
-      payload = parsePlacesPayload(await response.json())
-    } else {
-      payload = MOCK_DISCOVER_PLACES
-    }
-
+    const response = await fetch(buildPlacesApiUrl())
+    if (!response.ok) throw new Error(`Failed to load places (${response.status})`)
+    const payload = parsePlacesPayload(await response.json())
+    if (requestId !== placesRequestSeq) return
     allPlaces.value = payload.map(normalizePlace).filter(Boolean)
+    detailById.value = new Map()
   } catch (error) {
+    if (requestId !== placesRequestSeq) return
     loadError.value = 'Places are temporarily unavailable. Please try again in a little while.'
     allPlaces.value = []
     console.error('[Discover Places] Failed to load places:', error)
   } finally {
+    if (requestId !== placesRequestSeq) return
     isLoadingPlaces.value = false
   }
 }
@@ -930,6 +809,14 @@ onUnmounted(() => {
                   {{ radius.label }}
                 </button>
               </div>
+              <button
+                type="button"
+                class="toolbar-btn apply-btn"
+                :disabled="isLoadingPlaces"
+                @click="applyFilters"
+              >
+                {{ isLoadingPlaces ? 'Applying...' : 'Apply' }}
+              </button>
             </div>
           </div>
 
@@ -1156,9 +1043,6 @@ onUnmounted(() => {
             <button type="button" class="details-directions-btn" @click="openDirections">
               Directions
             </button>
-            <button type="button" class="details-secondary-link" @click="closeDetailPanel">
-              Close
-            </button>
           </div>
           <p v-if="directionsError" class="details-error">{{ directionsError }}</p>
         </div>
@@ -1263,6 +1147,11 @@ onUnmounted(() => {
 
 .location-btn {
   background: #16a34a;
+}
+
+.apply-btn {
+  background: #166534;
+  margin-left: 80px;
 }
 
 .address-error {
