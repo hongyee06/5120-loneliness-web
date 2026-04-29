@@ -402,15 +402,13 @@ function createToiletMarker(place) {
     icon: {
       path: 'M -1.5,-1.5 L 1.5,-1.5 L 1.5,1.5 L -1.5,1.5 z',
       scale: 10,
-      fillColor: '#3b82f6',
-      fillOpacity: 1,
-      strokeColor: '#ffffff',
-      strokeWeight: 2,
+      fillOpacity: 0,
+      strokeWeight: 0,
     },
     label: {
       text: '🚻',
-      color: '#ffffff',
-      fontSize: '14px',
+      color: '#1f2937',
+      fontSize: '16px',
       fontWeight: '800',
     },
   })
@@ -1714,7 +1712,8 @@ onUnmounted(() => {
 }
 
 .toilet-icon {
-  background: #3b82f6;
+  background: transparent;
+  color: #1f2937;
   font-size: 16px;
 }
 
